@@ -1,0 +1,690 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<meta name="theme-color" content="#0f0f1a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="MathViz 3D"/>
+<link rel="manifest" href="manifest.json"/>
+<title>MathViz 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --surface: #1a1a2e;
+    --surface2: #16213e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --gold: #f5a623;
+    --green: #00d4aa;
+    --blue: #4fc3f7;
+    --purple: #b39ddb;
+    --text: #e8eaf6;
+    --text2: #9fa8da;
+    --radius: 16px;
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; overflow:hidden; height:100vh; width:100vw; }
+
+  #splash {
+    position:fixed; inset:0; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:1000; transition:opacity 0.6s;
+  }
+  #splash .logo { font-size:3rem; font-weight:900; background:linear-gradient(135deg,var(--accent),var(--gold),var(--green)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  #splash .sub { color:var(--text2); margin-top:8px; font-size:1rem; letter-spacing:2px; }
+  #splash .loader { margin-top:40px; width:60px; height:4px; background:#333; border-radius:2px; overflow:hidden; }
+  #splash .loader-bar { height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--gold)); border-radius:2px; animation:load 1.5s ease forwards; }
+  @keyframes load { to { width:100%; } }
+
+  #app { display:flex; flex-direction:column; height:100vh; opacity:0; transition:opacity 0.5s; }
+  #app.visible { opacity:1; }
+
+  header {
+    background:var(--surface); padding:12px 16px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    flex-shrink:0; z-index:10;
+  }
+  .logo-sm { font-size:1.2rem; font-weight:800; background:linear-gradient(135deg,var(--accent),var(--gold)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header-btns { display:flex; gap:8px; }
+  .icon-btn { background:rgba(255,255,255,0.07); border:none; color:var(--text); width:36px; height:36px; border-radius:10px; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:background 0.2s; }
+  .icon-btn:hover { background:rgba(255,255,255,0.14); }
+
+  #main { display:flex; flex:1; overflow:hidden; }
+
+  #sidebar {
+    width:260px; background:var(--surface); border-right:1px solid rgba(255,255,255,0.06);
+    display:flex; flex-direction:column; overflow:hidden; flex-shrink:0;
+    transition:transform 0.3s; z-index:5;
+  }
+  #sidebar.hidden { transform:translateX(-260px); position:absolute; height:100%; }
+  .sidebar-title { padding:14px 16px 8px; font-size:0.7rem; font-weight:700; letter-spacing:2px; color:var(--text2); text-transform:uppercase; }
+  .topic-list { overflow-y:auto; flex:1; padding:0 8px 8px; }
+  .topic-list::-webkit-scrollbar { width:4px; }
+  .topic-list::-webkit-scrollbar-thumb { background:#333; border-radius:2px; }
+  .topic-group { margin-bottom:8px; }
+  .topic-group-title { font-size:0.65rem; font-weight:700; letter-spacing:1.5px; color:var(--accent); text-transform:uppercase; padding:8px 8px 4px; }
+  .topic-item {
+    padding:10px 12px; border-radius:10px; cursor:pointer;
+    display:flex; align-items:center; gap:10px;
+    transition:background 0.2s, transform 0.1s; margin-bottom:2px;
+    font-size:0.85rem;
+  }
+  .topic-item:hover { background:rgba(255,255,255,0.07); }
+  .topic-item.active { background:linear-gradient(135deg,rgba(233,69,96,0.25),rgba(245,166,35,0.15)); border:1px solid rgba(233,69,96,0.3); }
+  .topic-icon { font-size:1.1rem; width:24px; text-align:center; }
+  .topic-name { flex:1; }
+  .topic-badge { font-size:0.6rem; background:var(--accent); color:white; padding:2px 6px; border-radius:20px; }
+
+  #content { flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative; }
+
+  #canvas-wrap {
+    flex:1; position:relative; overflow:hidden; min-height:0;
+    background:radial-gradient(ellipse at center, #1a1a3e 0%, #0f0f1a 100%);
+  }
+  #three-canvas { display:block; width:100%!important; height:100%!important; }
+
+  #controls-overlay {
+    position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+    display:flex; gap:8px; z-index:10;
+  }
+  .ctrl-btn {
+    background:rgba(15,15,26,0.85); backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,0.12); color:var(--text);
+    padding:8px 14px; border-radius:20px; cursor:pointer; font-size:0.8rem;
+    transition:all 0.2s; white-space:nowrap;
+  }
+  .ctrl-btn:hover, .ctrl-btn.active { background:var(--accent); border-color:var(--accent); }
+  .ctrl-btn.play { background:var(--green); border-color:var(--green); color:#000; font-weight:700; }
+  .ctrl-btn.play:hover { background:#00b894; }
+
+  #step-indicator {
+    position:absolute; top:12px; left:50%; transform:translateX(-50%);
+    background:rgba(15,15,26,0.85); backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,0.1); border-radius:20px;
+    padding:6px 16px; font-size:0.75rem; color:var(--text2); z-index:10;
+    white-space:nowrap;
+  }
+  #step-indicator span { color:var(--gold); font-weight:700; }
+
+  #formula-panel {
+    position:absolute; top:12px; right:12px;
+    background:rgba(15,15,26,0.9); backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,0.1); border-radius:var(--radius);
+    padding:14px; max-width:200px; z-index:10;
+    transition:all 0.3s;
+  }
+  .formula-title { font-size:0.65rem; font-weight:700; letter-spacing:1.5px; color:var(--accent); text-transform:uppercase; margin-bottom:8px; }
+  .formula-line { font-size:0.85rem; color:var(--gold); font-family:'Courier New',monospace; margin-bottom:4px; line-height:1.5; }
+  .formula-desc { font-size:0.7rem; color:var(--text2); margin-top:6px; line-height:1.4; }
+
+  #info-panel {
+    background:var(--surface2); border-top:1px solid rgba(255,255,255,0.06);
+    padding:14px 16px; flex-shrink:0; max-height:180px; overflow-y:auto;
+  }
+  #info-panel::-webkit-scrollbar { width:3px; }
+  #info-panel::-webkit-scrollbar-thumb { background:#333; }
+  .info-title { font-size:1rem; font-weight:700; color:var(--text); margin-bottom:6px; }
+  .info-desc { font-size:0.82rem; color:var(--text2); line-height:1.6; }
+  .step-dots { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  .step-dot { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,0.15); cursor:pointer; transition:all 0.2s; }
+  .step-dot.active { background:var(--accent); transform:scale(1.4); }
+  .step-dot.done { background:var(--green); }
+
+  #quiz-panel {
+    position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);
+    z-index:100; display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #quiz-panel.show { display:flex; }
+  .quiz-card {
+    background:var(--surface); border-radius:20px; padding:24px;
+    max-width:400px; width:100%; border:1px solid rgba(255,255,255,0.1);
+    animation:slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform:translateY(30px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+  .quiz-q { font-size:1rem; font-weight:600; margin-bottom:16px; line-height:1.5; }
+  .quiz-opts { display:flex; flex-direction:column; gap:10px; }
+  .quiz-opt {
+    padding:12px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);
+    cursor:pointer; font-size:0.9rem; transition:all 0.2s; background:rgba(255,255,255,0.04);
+  }
+  .quiz-opt:hover { background:rgba(255,255,255,0.1); border-color:var(--blue); }
+  .quiz-opt.correct { background:rgba(0,212,170,0.2); border-color:var(--green); color:var(--green); }
+  .quiz-opt.wrong { background:rgba(233,69,96,0.2); border-color:var(--accent); color:var(--accent); }
+  .quiz-footer { display:flex; justify-content:space-between; align-items:center; margin-top:16px; }
+  .quiz-score { font-size:0.85rem; color:var(--text2); }
+  .quiz-next { background:var(--accent); color:white; border:none; padding:10px 20px; border-radius:10px; cursor:pointer; font-size:0.9rem; font-weight:600; }
+
+  #bottom-nav {
+    background:var(--surface); border-top:1px solid rgba(255,255,255,0.06);
+    display:flex; padding:8px 0 max(8px, env(safe-area-inset-bottom));
+    flex-shrink:0;
+  }
+  .nav-item {
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+    cursor:pointer; padding:4px; transition:all 0.2s; border-radius:10px;
+  }
+  .nav-item .nav-icon { font-size:1.3rem; }
+  .nav-item .nav-label { font-size:0.6rem; color:var(--text2); font-weight:600; letter-spacing:0.5px; }
+  .nav-item.active .nav-icon { filter:drop-shadow(0 0 6px var(--accent)); }
+  .nav-item.active .nav-label { color:var(--accent); }
+
+  @media (max-width: 600px) {
+    #sidebar { position:absolute; height:calc(100% - 0px); top:0; }
+    #formula-panel { max-width:140px; padding:10px; font-size:0.75rem; }
+    .formula-line { font-size:0.75rem; }
+  }
+
+  #touch-hint {
+    position:absolute; bottom:60px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.7); border-radius:20px; padding:6px 14px;
+    font-size:0.72rem; color:var(--text2); z-index:10; pointer-events:none;
+    animation:fadeOut 3s 2s forwards;
+  }
+  @keyframes fadeOut { to { opacity:0; } }
+
+  #anim-progress {
+    position:absolute; bottom:0; left:0; right:0; height:3px;
+    background:rgba(255,255,255,0.08); z-index:10;
+  }
+  #anim-progress-bar { height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--gold)); transition:width 0.3s; }
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="logo">MathViz 3D</div>
+  <div class="sub">INTERACTIVE MATH & PHYSICS</div>
+  <div class="loader"><div class="loader-bar"></div></div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo-sm">MathViz 3D</div>
+    <div style="font-size:0.75rem;color:var(--text2)" id="topic-header">Sphere — Volume Derivation</div>
+    <div class="header-btns">
+      <button class="icon-btn" onclick="toggleSidebar()" title="Topics">☰</button>
+      <button class="icon-btn" onclick="showQuiz()" title="Quiz">🧠</button>
+    </div>
+  </header>
+
+  <div id="main">
+    <div id="sidebar">
+      <div class="sidebar-title">Topics</div>
+      <div class="topic-list">
+        <div class="topic-group">
+          <div class="topic-group-title">🔵 Sphere</div>
+          <div class="topic-item active" onclick="loadTopic('sphere-volume')"><span class="topic-icon">📐</span><span class="topic-name">Volume Derivation</span></div>
+          <div class="topic-item" onclick="loadTopic('sphere-surface')"><span class="topic-icon">🌐</span><span class="topic-name">Surface Area</span></div>
+          <div class="topic-item" onclick="loadTopic('sphere-cut')"><span class="topic-icon">✂️</span><span class="topic-name">3D Cross Section</span></div>
+        </div>
+        <div class="topic-group">
+          <div class="topic-group-title">🟡 Cylinder</div>
+          <div class="topic-item" onclick="loadTopic('cylinder-volume')"><span class="topic-icon">📐</span><span class="topic-name">Volume Derivation</span></div>
+          <div class="topic-item" onclick="loadTopic('cylinder-surface')"><span class="topic-icon">📏</span><span class="topic-name">Surface Area</span></div>
+          <div class="topic-item" onclick="loadTopic('cylinder-cut')"><span class="topic-icon">✂️</span><span class="topic-name">3D Cross Section</span></div>
+        </div>
+        <div class="topic-group">
+          <div class="topic-group-title">🔺 Cone</div>
+          <div class="topic-item" onclick="loadTopic('cone-volume')"><span class="topic-icon">📐</span><span class="topic-name">Volume Derivation</span></div>
+          <div class="topic-item" onclick="loadTopic('cone-surface')"><span class="topic-icon">📏</span><span class="topic-name">Surface Area</span></div>
+          <div class="topic-item" onclick="loadTopic('cone-cut')"><span class="topic-icon">✂️</span><span class="topic-name">3D Cross Section</span></div>
+        </div>
+        <div class="topic-group">
+          <div class="topic-group-title">⚡ Physics</div>
+          <div class="topic-item" onclick="loadTopic('projectile')"><span class="topic-icon">🚀</span><span class="topic-name">Projectile Motion</span><span class="topic-badge">NEW</span></div>
+          <div class="topic-item" onclick="loadTopic('wave')"><span class="topic-icon">〰️</span><span class="topic-name">Wave Motion</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="content">
+      <div id="canvas-wrap">
+        <canvas id="three-canvas"></canvas>
+        <div id="step-indicator">Step <span id="step-num">1</span> of <span id="step-total">5</span></div>
+        <div id="formula-panel">
+          <div class="formula-title">Formula</div>
+          <div id="formula-content">
+            <div class="formula-line">V = (4/3)πr³</div>
+            <div class="formula-desc">Volume of a sphere using disk integration</div>
+          </div>
+        </div>
+        <div id="touch-hint">👆 Drag to rotate • Pinch to zoom</div>
+        <div id="controls-overlay">
+          <button class="ctrl-btn" onclick="prevStep()">◀ Prev</button>
+          <button class="ctrl-btn play" id="play-btn" onclick="togglePlay()">▶ Play</button>
+          <button class="ctrl-btn" onclick="nextStep()">Next ▶</button>
+        </div>
+        <div id="anim-progress"><div id="anim-progress-bar"></div></div>
+      </div>
+
+      <div id="info-panel">
+        <div class="info-title" id="info-title">Sphere Volume — Disk Method</div>
+        <div class="info-desc" id="info-desc">We derive the volume of a sphere by slicing it into infinitely thin circular disks along the x-axis and integrating their areas.</div>
+        <div class="step-dots" id="step-dots"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom-nav">
+    <div class="nav-item active" onclick="setNav(0,this)"><div class="nav-icon">🏠</div><div class="nav-label">HOME</div></div>
+    <div class="nav-item" onclick="setNav(1,this)"><div class="nav-icon">📚</div><div class="nav-label">TOPICS</div></div>
+    <div class="nav-item" onclick="setNav(2,this);showQuiz()"><div class="nav-icon">🧠</div><div class="nav-label">QUIZ</div></div>
+    <div class="nav-item" onclick="setNav(3,this)"><div class="nav-icon">⚙️</div><div class="nav-label">SETTINGS</div></div>
+  </div>
+</div>
+
+<div id="quiz-panel">
+  <div class="quiz-card">
+    <div class="quiz-q" id="quiz-q"></div>
+    <div class="quiz-opts" id="quiz-opts"></div>
+    <div class="quiz-footer">
+      <div class="quiz-score">Score: <span id="quiz-score">0</span></div>
+      <button class="quiz-next" onclick="closeQuiz()">✕ Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── THREE.JS SETUP ──────────────────────────────────────
+const canvas = document.getElementById('three-canvas');
+const wrap   = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50,1,0.1,100);
+camera.position.set(4,3,5);
+
+// Lights
+scene.add(new THREE.AmbientLight(0x404080,0.8));
+const dir = new THREE.DirectionalLight(0xffffff,1.2);
+dir.position.set(5,8,5); dir.castShadow=true; scene.add(dir);
+const pl1 = new THREE.PointLight(0xe94560,1.5,20); pl1.position.set(-3,2,3); scene.add(pl1);
+const pl2 = new THREE.PointLight(0x4fc3f7,1.0,20); pl2.position.set(3,-2,-3); scene.add(pl2);
+
+// Grid + Axes
+scene.add(new THREE.GridHelper(10,20,0x333355,0x222244));
+function axis(d,c){const m=new THREE.LineBasicMaterial({color:c});return new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),d.clone().multiplyScalar(3)]),m);}
+scene.add(axis(new THREE.Vector3(1,0,0),0xff4444));
+scene.add(axis(new THREE.Vector3(0,1,0),0x44ff44));
+scene.add(axis(new THREE.Vector3(0,0,1),0x4444ff));
+
+// ── ORBIT CONTROLS ──────────────────────────────────────
+let drag=false,px=0,py=0,theta=0.8,phi=0.6,rad=7,pinch=0;
+const tgt=new THREE.Vector3();
+function camUpdate(){camera.position.set(tgt.x+rad*Math.sin(phi)*Math.sin(theta),tgt.y+rad*Math.cos(phi),tgt.z+rad*Math.sin(phi)*Math.cos(theta));camera.lookAt(tgt);}
+camUpdate();
+canvas.addEventListener('mousedown',e=>{drag=true;px=e.clientX;py=e.clientY;});
+canvas.addEventListener('mousemove',e=>{if(!drag)return;theta-=(e.clientX-px)*0.01;phi=Math.max(0.1,Math.min(Math.PI-0.1,phi-(e.clientY-py)*0.01));px=e.clientX;py=e.clientY;camUpdate();});
+canvas.addEventListener('mouseup',()=>drag=false);
+canvas.addEventListener('wheel',e=>{rad=Math.max(2,Math.min(15,rad+e.deltaY*0.01));camUpdate();});
+canvas.addEventListener('touchstart',e=>{if(e.touches.length===1){drag=true;px=e.touches[0].clientX;py=e.touches[0].clientY;}if(e.touches.length===2)pinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);},{passive:true});
+canvas.addEventListener('touchmove',e=>{if(e.touches.length===1&&drag){theta-=(e.touches[0].clientX-px)*0.012;phi=Math.max(0.1,Math.min(Math.PI-0.1,phi-(e.touches[0].clientY-py)*0.012));px=e.touches[0].clientX;py=e.touches[0].clientY;camUpdate();}if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);rad=Math.max(2,Math.min(15,rad-(d-pinch)*0.02));pinch=d;camUpdate();}},{passive:true});
+canvas.addEventListener('touchend',()=>drag=false);
+
+// ── RESIZE ──────────────────────────────────────────────
+function resize(){const w=wrap.clientWidth,h=wrap.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+new ResizeObserver(resize).observe(wrap); resize();
+
+// ── MATERIALS ───────────────────────────────────────────
+const M = {
+  sphere: ()=>new THREE.MeshPhongMaterial({color:0x4fc3f7,transparent:true,opacity:0.55,side:THREE.DoubleSide,shininess:80}),
+  wire:   ()=>new THREE.MeshBasicMaterial({color:0x4fc3f7,wireframe:true,transparent:true,opacity:0.25}),
+  disk:   ()=>new THREE.MeshPhongMaterial({color:0xe94560,transparent:true,opacity:0.75,side:THREE.DoubleSide}),
+  gold:   ()=>new THREE.MeshPhongMaterial({color:0xf5a623,transparent:true,opacity:0.8,shininess:120}),
+  green:  ()=>new THREE.MeshPhongMaterial({color:0x00d4aa,transparent:true,opacity:0.75,shininess:80}),
+  cyl:    ()=>new THREE.MeshPhongMaterial({color:0xb39ddb,transparent:true,opacity:0.55,side:THREE.DoubleSide,shininess:80}),
+  cone:   ()=>new THREE.MeshPhongMaterial({color:0xf5a623,transparent:true,opacity:0.55,side:THREE.DoubleSide,shininess:80}),
+  ghost:  (c)=>new THREE.MeshPhongMaterial({color:c||0x4fc3f7,transparent:true,opacity:0.2,side:THREE.DoubleSide}),
+  hsl:    (h)=>new THREE.MeshPhongMaterial({color:new THREE.Color().setHSL(h,0.9,0.55),transparent:true,opacity:0.75,side:THREE.DoubleSide}),
+};
+
+// ── SCENE OBJECTS ────────────────────────────────────────
+let objs=[], diskGrp=null;
+const R=1.5, H=3, RC=1;
+function add(o){scene.add(o);objs.push(o);return o;}
+function clear(){objs.forEach(o=>scene.remove(o));objs=[];if(diskGrp){scene.remove(diskGrp);diskGrp=null;}}
+
+function sphereDisks(n=16){
+  diskGrp=new THREE.Group();
+  for(let i=0;i<n;i++){
+    const x=-R+(2*R/(n-1))*i, dr=Math.sqrt(Math.max(0,R*R-x*x));
+    if(dr<0.01)continue;
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(dr,dr,2*R/n,32),M.hsl(i/n*0.6+0.55));
+    m.rotation.z=Math.PI/2; m.position.x=x; diskGrp.add(m);
+  }
+  scene.add(diskGrp); objs.push(diskGrp);
+}
+
+function line(pts,color){return add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color,linewidth:2})));}
+
+// ── ACTIONS ──────────────────────────────────────────────
+function exec(action){
+  clear();
+  switch(action){
+    case 'showSphere':
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.sphere()));
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,24,24),M.wire()));
+      break;
+    case 'showDisk1':{
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.sphere()));
+      const dr=Math.sqrt(R*R-0.36);
+      const d=add(new THREE.Mesh(new THREE.CylinderGeometry(dr,dr,0.12,48),M.disk()));
+      d.position.y=0.6;
+      line([new THREE.Vector3(0,0.6,0),new THREE.Vector3(dr,0.6,0)],0xf5a623);
+      break;}
+    case 'showDisks':
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.ghost()));
+      sphereDisks(16);
+      break;
+    case 'showIntegral':
+    case 'showResult':
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.sphere()));
+      sphereDisks(20);
+      break;
+    case 'showBand':{
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.ghost()));
+      const b=add(new THREE.Mesh(new THREE.TorusGeometry(R*0.87,0.08,16,64),M.disk()));
+      b.rotation.x=Math.PI/2; b.position.y=R*0.5;
+      break;}
+    case 'showBands':
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.ghost()));
+      for(let i=0;i<8;i++){const phi2=Math.PI*i/8,y=R*Math.cos(phi2),rr=R*Math.sin(phi2);if(rr<0.05)continue;const b=add(new THREE.Mesh(new THREE.TorusGeometry(rr,0.05,8,48),M.hsl(i/8*0.5+0.5)));b.rotation.x=Math.PI/2;b.position.y=y;}
+      break;
+    case 'cutHorizontal':{
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.ghost()));
+      const p=add(new THREE.Mesh(new THREE.CircleGeometry(R,64),M.disk()));p.rotation.x=Math.PI/2;
+      break;}
+    case 'cutVertical':{
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.ghost()));
+      add(new THREE.Mesh(new THREE.CircleGeometry(R,64),M.disk()));
+      const p2=add(new THREE.Mesh(new THREE.CircleGeometry(R,64),M.green()));p2.rotation.y=Math.PI/2;
+      break;}
+    case 'cutOffset':{
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.ghost()));
+      const cr=Math.sqrt(R*R-0.64),p=add(new THREE.Mesh(new THREE.CircleGeometry(cr,64),M.gold()));
+      p.rotation.x=Math.PI/2;p.position.y=0.8;
+      break;}
+    case 'showAllCuts':
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.ghost()));
+      [[0,0xe94560],[0.6,0xf5a623],[1.1,0x00d4aa],[-0.7,0xb39ddb]].forEach(([y,c])=>{
+        const cr=Math.sqrt(Math.max(0,R*R-y*y));
+        const p=add(new THREE.Mesh(new THREE.CircleGeometry(cr,48),new THREE.MeshPhongMaterial({color:c,transparent:true,opacity:0.75,side:THREE.DoubleSide})));
+        p.rotation.x=Math.PI/2;p.position.y=y;
+      });
+      break;
+    case 'showCylinder':
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,24,1,false),M.wire()));
+      break;
+    case 'showCylBase':{
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      const b=add(new THREE.Mesh(new THREE.CircleGeometry(RC,64),M.disk()));b.rotation.x=Math.PI/2;b.position.y=-H/2;
+      break;}
+    case 'showCylStack':
+      for(let i=0;i<8;i++){const m=add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H/8,32),M.hsl(i/8*0.4+0.6)));m.position.y=-H/2+H*i/7;}
+      break;
+    case 'showCylIntegral':
+    case 'showCylResult':
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      break;
+    case 'showCylCaps':{
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      [H/2,-H/2].forEach(y=>{const c=add(new THREE.Mesh(new THREE.CircleGeometry(RC,64),M.disk()));c.rotation.x=Math.PI/2;c.position.y=y;});
+      break;}
+    case 'showCylUnroll':{
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,32,1,true),M.cyl()));
+      const r=add(new THREE.Mesh(new THREE.PlaneGeometry(2*Math.PI*RC,H),M.green()));r.position.x=3.5;
+      break;}
+    case 'showCylLateral':
+    case 'showCylSurface':
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      break;
+    case 'cutCylH':{
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      const p=add(new THREE.Mesh(new THREE.CircleGeometry(RC,64),M.disk()));p.rotation.x=Math.PI/2;p.position.y=0.5;
+      break;}
+    case 'cutCylV':{
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      add(new THREE.Mesh(new THREE.PlaneGeometry(2*RC,H),M.green()));
+      break;}
+    case 'cutCylD':{
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      const e=add(new THREE.Mesh(new THREE.CircleGeometry(RC*1.4,64),M.gold()));e.rotation.x=Math.PI/4;
+      break;}
+    case 'showCylAll':{
+      add(new THREE.Mesh(new THREE.CylinderGeometry(RC,RC,H,48,1,false),M.cyl()));
+      const p1=add(new THREE.Mesh(new THREE.CircleGeometry(RC,48),M.disk()));p1.rotation.x=Math.PI/2;p1.position.y=0.8;
+      add(new THREE.Mesh(new THREE.PlaneGeometry(2*RC,H),M.green()));
+      const p3=add(new THREE.Mesh(new THREE.CircleGeometry(RC*1.4,48),M.gold()));p3.rotation.x=Math.PI/4;p3.position.y=-0.5;
+      break;}
+    case 'showCone':
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,24,1,false),M.wire()));
+      break;
+    case 'showConeDisk':{
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));
+      const cr=R*1.5/H,d=add(new THREE.Mesh(new THREE.CylinderGeometry(cr,cr,0.1,48),M.disk()));d.position.y=1.5-H/2;
+      break;}
+    case 'showConeDisks':
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.ghost(0xf5a623)));
+      for(let i=1;i<=10;i++){const y=H*i/10,cr=R*y/H,d=add(new THREE.Mesh(new THREE.CylinderGeometry(cr,cr,H/10,32),M.hsl(i/10*0.4+0.05)));d.position.y=y-H/2;}
+      break;
+    case 'showConeIntegral':
+    case 'showConeResult':
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));
+      add(new THREE.Mesh(new THREE.CylinderGeometry(R,R,H,32,1,true),M.ghost(0x4fc3f7)));
+      break;
+    case 'showConeBase':{
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));
+      const b=add(new THREE.Mesh(new THREE.CircleGeometry(R,64),M.disk()));b.rotation.x=Math.PI/2;b.position.y=-H/2;
+      break;}
+    case 'showConeSlant':
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));
+      line([new THREE.Vector3(0,H/2,0),new THREE.Vector3(R,-H/2,0)],0xf5a623);
+      break;
+    case 'showConeLateral':
+    case 'showConeSurface':
+      add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));
+      break;
+    case 'showDoubleCone':{
+      const m1=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m1.position.y=H/2;
+      const m2=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m2.rotation.z=Math.PI;m2.position.y=-H/2;
+      break;}
+    case 'cutConeH':{
+      const m1=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m1.position.y=H/2;
+      const m2=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m2.rotation.z=Math.PI;m2.position.y=-H/2;
+      const p=add(new THREE.Mesh(new THREE.CircleGeometry(R*0.6,64),M.disk()));p.rotation.x=Math.PI/2;p.position.y=H*0.3;
+      break;}
+    case 'cutConeE':{
+      const m1=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m1.position.y=H/2;
+      const m2=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m2.rotation.z=Math.PI;m2.position.y=-H/2;
+      const e=add(new THREE.Mesh(new THREE.CircleGeometry(R*0.8,64),M.green()));e.rotation.x=Math.PI/2-0.4;e.position.y=H*0.2;
+      break;}
+    case 'cutConeP':{
+      const m1=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m1.position.y=H/2;
+      const m2=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m2.rotation.z=Math.PI;m2.position.y=-H/2;
+      const pts=[];for(let t=-2;t<=2;t+=0.1)pts.push(new THREE.Vector3(t,t*t*0.4-0.5,0));
+      line(pts,0xf5a623);
+      break;}
+    case 'cutConeHyp':{
+      const m1=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m1.position.y=H/2;
+      const m2=add(new THREE.Mesh(new THREE.ConeGeometry(R,H,48,1,false),M.cone()));m2.rotation.z=Math.PI;m2.position.y=-H/2;
+      [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sx,sy])=>{const pts=[];for(let t=0.5;t<=2;t+=0.1)pts.push(new THREE.Vector3(sx*t,sy*Math.sqrt(t*t-0.2),0));line(pts,0xb39ddb);});
+      break;}
+    case 'showProjectile':
+    case 'showProjectileComp':{
+      add(new THREE.Mesh(new THREE.PlaneGeometry(10,6),new THREE.MeshPhongMaterial({color:0x1a3a1a,transparent:true,opacity:0.5})));
+      const ball=add(new THREE.Mesh(new THREE.SphereGeometry(0.15,16,16),new THREE.MeshPhongMaterial({color:0xe94560})));ball.position.set(-4,0.15,0);
+      if(action==='showProjectileComp'){
+        line([new THREE.Vector3(-4,0.5,0),new THREE.Vector3(-2,0.5,0)],0x4fc3f7);
+        line([new THREE.Vector3(-4,0.5,0),new THREE.Vector3(-4,2,0)],0xe94560);
+      } else {
+        line([new THREE.Vector3(-4,0.15,0),new THREE.Vector3(-3.2,1,0)],0xf5a623);
+      }
+      break;}
+    case 'showProjectileArc':
+    case 'showProjectileRange':
+    case 'showProjectileFull':{
+      add(new THREE.Mesh(new THREE.PlaneGeometry(10,6),new THREE.MeshPhongMaterial({color:0x1a3a1a,transparent:true,opacity:0.5})));
+      const pts=[],v0=5,g=9.8,th=Math.PI/4;
+      for(let t=0;t<=2*v0*Math.sin(th)/g;t+=0.05)pts.push(new THREE.Vector3(-4+v0*Math.cos(th)*t,v0*Math.sin(th)*t-0.5*g*t*t,0));
+      line(pts,0xf5a623);
+      const ball=add(new THREE.Mesh(new THREE.SphereGeometry(0.15,16,16),new THREE.MeshPhongMaterial({color:0xe94560})));ball.position.set(-4,0,0);
+      break;}
+    case 'showWave':
+    case 'showWaveAmp':
+    case 'showWaveFreq':
+    case 'showWaveSpeed':
+    case 'showWaveSuper':{
+      const pts1=[],pts2=[],A=1,k=2,om=1;
+      for(let x=-4;x<=4;x+=0.05){
+        pts1.push(new THREE.Vector3(x,A*Math.sin(k*x-om*animT),0));
+        if(action==='showWaveSuper')pts2.push(new THREE.Vector3(x,A*Math.sin(k*x-om*animT)+A*0.6*Math.sin(k*1.5*x-om*1.5*animT),0));
+      }
+      line(pts1,0x4fc3f7);
+      if(action==='showWaveSuper')line(pts2,0xe94560);
+      line([new THREE.Vector3(-4,0,0),new THREE.Vector3(4,0,0)],0x555577);
+      line([new THREE.Vector3(0,-1.5,0),new THREE.Vector3(0,1.5,0)],0x555577);
+      break;}
+    default:
+      add(new THREE.Mesh(new THREE.SphereGeometry(R,48,48),M.sphere()));
+  }
+}
+
+// ── TOPICS DATA ──────────────────────────────────────────
+const topics={
+  'sphere-volume':{title:'Sphere Volume — Disk Method',header:'Sphere — Volume Derivation',formula:'V = (4/3)πr³',formulaDesc:'Volume via disk integration along x-axis',steps:[{desc:'Start with a sphere of radius r = 1.5. We want to find its volume by slicing it into thin disks.',action:'showSphere'},{desc:'At position x along the axis, a cross-sectional disk has radius y = √(r²−x²). This comes from the sphere equation x²+y²=r².',action:'showDisk1'},{desc:'Each disk has area A(x) = π·y² = π(r²−x²). We stack infinitely many such disks from x=−r to x=+r.',action:'showDisks'},{desc:'Integrating: V = ∫₋ᵣʳ π(r²−x²)dx = π[r²x − x³/3]₋ᵣʳ',action:'showIntegral'},{desc:'Result: V = π[(r³ − r³/3) − (−r³ + r³/3)] = π·(4r³/3) = (4/3)πr³ ✓',action:'showResult'}]},
+  'sphere-surface':{title:'Sphere Surface Area',header:'Sphere — Surface Area',formula:'A = 4πr²',formulaDesc:'Surface area via band integration',steps:[{desc:'A sphere of radius r. We derive its surface area by summing infinitesimal bands.',action:'showSphere'},{desc:'A thin band at angle φ has circumference 2π·r·sinφ and width r·dφ.',action:'showBand'},{desc:'Band area dA = 2πr·sinφ · r·dφ = 2πr²·sinφ·dφ',action:'showBands'},{desc:'Integrate: A = ∫₀^π 2πr²·sinφ·dφ = 2πr²[−cosφ]₀^π',action:'showIntegral'},{desc:'A = 2πr²(−cos π + cos 0) = 2πr²(1+1) = 4πr² ✓',action:'showResult'}]},
+  'sphere-cut':{title:'Sphere — 3D Cross Sections',header:'Sphere — Cross Sections',formula:'x²+y²+z²=r²',formulaDesc:'Equation of a sphere centered at origin',steps:[{desc:'A solid sphere of radius r=1.5. We will cut it with different planes to reveal cross sections.',action:'showSphere'},{desc:'Horizontal cut (z=0 plane): The cross section is a circle of radius r — the great circle.',action:'cutHorizontal'},{desc:'Vertical cut (x=0 plane): Another great circle. Any plane through the center gives a great circle.',action:'cutVertical'},{desc:'Off-center cut (z=0.8): The cross section is a smaller circle with radius √(r²−0.8²).',action:'cutOffset'},{desc:'The cross section of a sphere is always a circle! Its radius depends on the distance from center.',action:'showAllCuts'}]},
+  'cylinder-volume':{title:'Cylinder Volume',header:'Cylinder — Volume Derivation',formula:'V = πr²h',formulaDesc:'Base area × height',steps:[{desc:'A cylinder with radius r=1 and height h=3. Volume = area of base × height.',action:'showCylinder'},{desc:'The base is a circle with area A = πr². This is the key cross-section.',action:'showCylBase'},{desc:'Stack the circular base h units high. Each layer has the same area πr².',action:'showCylStack'},{desc:'V = ∫₀ʰ πr² dx = πr²·h (since r is constant throughout)',action:'showCylIntegral'},{desc:'V = πr²h. For r=1, h=3: V = π(1)²(3) = 3π ≈ 9.42 cubic units ✓',action:'showCylResult'}]},
+  'cylinder-surface':{title:'Cylinder Surface Area',header:'Cylinder — Surface Area',formula:'A = 2πr² + 2πrh',formulaDesc:'Two circles + lateral surface',steps:[{desc:'A cylinder has three surfaces: top circle, bottom circle, and the lateral (side) surface.',action:'showCylinder'},{desc:'Top circle area = πr². Bottom circle area = πr². Total caps = 2πr².',action:'showCylCaps'},{desc:'Unroll the lateral surface: it becomes a rectangle with width 2πr and height h.',action:'showCylUnroll'},{desc:'Lateral area = 2πr·h. This is the circumference of the base times the height.',action:'showCylLateral'},{desc:'Total Surface Area = 2πr² + 2πrh = 2πr(r+h) ✓',action:'showCylSurface'}]},
+  'cylinder-cut':{title:'Cylinder — Cross Sections',header:'Cylinder — Cross Sections',formula:'x²+y²=r²',formulaDesc:'Circular cross-section equation',steps:[{desc:'A solid cylinder. Different cutting planes reveal different cross sections.',action:'showCylinder'},{desc:'Horizontal cut (parallel to base): Always gives a circle of radius r.',action:'cutCylH'},{desc:'Vertical cut through axis: Gives a rectangle of width 2r and height h.',action:'cutCylV'},{desc:'Diagonal cut at 45°: Gives an ellipse! The axes of the ellipse depend on the angle.',action:'cutCylD'},{desc:'Summary: Cylinder cross sections can be circles, rectangles, or ellipses depending on cut angle.',action:'showCylAll'}]},
+  'cone-volume':{title:'Cone Volume',header:'Cone — Volume Derivation',formula:'V = (1/3)πr²h',formulaDesc:'One-third of cylinder volume',steps:[{desc:'A cone with base radius r=1.5 and height h=3. We derive its volume by disk integration.',action:'showCone'},{desc:'At height y from apex, the cross-section radius is r(y) = r·y/h (linear taper).',action:'showConeDisk'},{desc:'Disk area at height y: A(y) = π·[r·y/h]² = πr²y²/h²',action:'showConeDisks'},{desc:'V = ∫₀ʰ πr²y²/h² dy = (πr²/h²)·[y³/3]₀ʰ = πr²h/3',action:'showConeIntegral'},{desc:'V = (1/3)πr²h — exactly 1/3 of the cylinder with same base and height! ✓',action:'showConeResult'}]},
+  'cone-surface':{title:'Cone Surface Area',header:'Cone — Surface Area',formula:'A = πr² + πrl',formulaDesc:'Base + lateral surface (l = slant height)',steps:[{desc:'A cone with base radius r and slant height l = √(r²+h²).',action:'showCone'},{desc:'Base area = πr² (circle). The lateral surface unrolls into a sector.',action:'showConeBase'},{desc:'Slant height l = √(r²+h²). The lateral surface is a sector of a circle with radius l.',action:'showConeSlant'},{desc:'Lateral area = πrl (arc length of sector = 2πr, sector area = ½·l·2πr = πrl).',action:'showConeLateral'},{desc:'Total Surface Area = πr² + πrl = πr(r+l) ✓',action:'showConeSurface'}]},
+  'cone-cut':{title:'Cone — Conic Sections',header:'Cone — Conic Sections',formula:'Ax²+Bxy+Cy²+...',formulaDesc:'General conic section equation',steps:[{desc:'A double cone (two cones tip-to-tip). Cutting it at different angles gives the famous conic sections!',action:'showDoubleCone'},{desc:'Horizontal cut: Circle — the simplest conic section.',action:'cutConeH'},{desc:'Slight angle cut: Ellipse — a stretched circle. Used in planetary orbits!',action:'cutConeE'},{desc:'Cut parallel to slant: Parabola — used in satellite dishes and projectile paths!',action:'cutConeP'},{desc:'Cut steeper than slant (both cones): Hyperbola — two separate curves!',action:'cutConeHyp'}]},
+  'projectile':{title:'Projectile Motion',header:'Physics — Projectile Motion',formula:'y = x·tanθ − gx²/(2v₀²cos²θ)',formulaDesc:'Parabolic trajectory equation',steps:[{desc:'A projectile launched at angle θ=45° with initial velocity v₀. Gravity acts downward.',action:'showProjectile'},{desc:'Horizontal: x = v₀·cosθ·t (constant velocity). Vertical: y = v₀·sinθ·t − ½gt²',action:'showProjectileComp'},{desc:'The trajectory is a parabola. Maximum height at t = v₀·sinθ/g.',action:'showProjectileArc'},{desc:'Range R = v₀²·sin(2θ)/g. Maximum range at θ=45°!',action:'showProjectileRange'},{desc:'Full trajectory shown. The shape is always parabolic regardless of launch angle.',action:'showProjectileFull'}]},
+  'wave':{title:'Wave Motion',header:'Physics — Wave Motion',formula:'y = A·sin(kx − ωt)',formulaDesc:'Transverse wave equation',steps:[{desc:'A transverse wave: particles oscillate perpendicular to wave propagation direction.',action:'showWave'},{desc:'Amplitude A = max displacement. Wavelength λ = distance between peaks.',action:'showWaveAmp'},{desc:'Wave number k = 2π/λ. Angular frequency ω = 2π/T = 2πf.',action:'showWaveFreq'},{desc:'Wave speed v = λ/T = λf = ω/k. The wave moves right as t increases.',action:'showWaveSpeed'},{desc:'Superposition: Two waves combine. Constructive interference when in phase, destructive when out of phase.',action:'showWaveSuper'}]},
+};
+
+// ── STATE ────────────────────────────────────────────────
+let curTopic='sphere-volume', curStep=0, totalSteps=5;
+let isPlaying=false, playTimer=null, animT=0;
+
+function loadTopic(id){
+  curTopic=id; curStep=0;
+  const t=topics[id]; if(!t)return;
+  totalSteps=t.steps.length;
+  document.getElementById('topic-header').textContent=t.header;
+  document.getElementById('info-title').textContent=t.title;
+  document.getElementById('formula-content').innerHTML=`<div class="formula-line">${t.formula}</div><div class="formula-desc">${t.formulaDesc}</div>`;
+  document.querySelectorAll('.topic-item').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.topic-item').forEach(el=>{if(el.getAttribute('onclick')===`loadTopic('${id}')`)el.classList.add('active');});
+  if(window.innerWidth<600)document.getElementById('sidebar').classList.add('hidden');
+  updateStep();
+}
+
+function updateStep(){
+  const t=topics[curTopic], s=t.steps[curStep];
+  document.getElementById('step-num').textContent=curStep+1;
+  document.getElementById('step-total').textContent=totalSteps;
+  document.getElementById('info-desc').textContent=s.desc;
+  document.getElementById('anim-progress-bar').style.width=((curStep+1)/totalSteps*100)+'%';
+  const dots=document.getElementById('step-dots'); dots.innerHTML='';
+  for(let i=0;i<totalSteps;i++){
+    const d=document.createElement('div');
+    d.className='step-dot'+(i===curStep?' active':i<curStep?' done':'');
+    d.onclick=(i=>()=>{curStep=i;updateStep();})(i);
+    dots.appendChild(d);
+  }
+  exec(s.action);
+}
+
+function nextStep(){if(curStep<totalSteps-1){curStep++;updateStep();}}
+function prevStep(){if(curStep>0){curStep--;updateStep();}}
+
+function togglePlay(){
+  isPlaying=!isPlaying;
+  const btn=document.getElementById('play-btn');
+  if(isPlaying){
+    btn.textContent='⏸ Pause';btn.style.background='var(--gold)';
+    playTimer=setInterval(()=>{if(curStep<totalSteps-1){curStep++;updateStep();}else{isPlaying=false;btn.textContent='▶ Play';btn.style.background='var(--green)';clearInterval(playTimer);}},2800);
+  }else{btn.textContent='▶ Play';btn.style.background='var(--green)';clearInterval(playTimer);}
+}
+
+// ── QUIZ ─────────────────────────────────────────────────
+const quizData=[
+  {q:'What is the volume of a sphere with radius r?',opts:['(4/3)πr³','2πr²','πr³','(2/3)πr³'],ans:0},
+  {q:'What is the surface area of a sphere?',opts:['2πr²','4πr²','πr²','6πr²'],ans:1},
+  {q:'Volume of a cylinder with radius r and height h?',opts:['πrh','2πrh','πr²h','(1/3)πr²h'],ans:2},
+  {q:'Volume of a cone with base radius r and height h?',opts:['πr²h','(1/2)πr²h','(1/3)πr²h','(2/3)πr²h'],ans:2},
+  {q:'What conic section is formed by cutting a cone parallel to its slant?',opts:['Circle','Ellipse','Parabola','Hyperbola'],ans:2},
+  {q:'What is the surface area of a cylinder (including both caps)?',opts:['2πrh','2πr²+2πrh','πr²+2πrh','4πr²'],ans:1},
+  {q:'At what launch angle is projectile range maximum?',opts:['30°','60°','45°','90°'],ans:2},
+  {q:'What is the slant height of a cone with r=3 and h=4?',opts:['5','7','√7','25'],ans:0},
+  {q:'Cross section of a sphere is always a...?',opts:['Ellipse','Circle','Rectangle','Triangle'],ans:1},
+  {q:'Wave equation y = A·sin(kx−ωt): what is A?',opts:['Wavelength','Frequency','Amplitude','Wave speed'],ans:2},
+];
+let qIdx=0, qScore=0, qAnswered=false;
+
+function showQuiz(){qIdx=Math.floor(Math.random()*quizData.length);qAnswered=false;renderQuiz();document.getElementById('quiz-panel').classList.add('show');}
+function closeQuiz(){document.getElementById('quiz-panel').classList.remove('show');}
+function renderQuiz(){
+  const q=quizData[qIdx];
+  document.getElementById('quiz-q').textContent=q.q;
+  document.getElementById('quiz-score').textContent=qScore;
+  const opts=document.getElementById('quiz-opts'); opts.innerHTML='';
+  q.opts.forEach((o,i)=>{
+    const btn=document.createElement('div');btn.className='quiz-opt';btn.textContent=o;
+    btn.onclick=()=>{if(qAnswered)return;qAnswered=true;if(i===q.ans){btn.classList.add('correct');qScore++;}else{btn.classList.add('wrong');opts.children[q.ans].classList.add('correct');}document.getElementById('quiz-score').textContent=qScore;setTimeout(()=>{qIdx=(qIdx+1)%quizData.length;qAnswered=false;renderQuiz();},1200);};
+    opts.appendChild(btn);
+  });
+}
+
+// ── UI ───────────────────────────────────────────────────
+let sidebarVisible=true;
+function toggleSidebar(){sidebarVisible=!sidebarVisible;document.getElementById('sidebar').classList.toggle('hidden',!sidebarVisible);}
+function setNav(idx,el){document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));el.classList.add('active');if(idx===1)toggleSidebar();}
+
+// ── ANIMATION LOOP ───────────────────────────────────────
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=clock.getDelta(); animT+=dt;
+  objs.forEach(o=>{if((o.isMesh||o.isGroup)&&!o.userData.noRotate)o.rotation.y+=dt*0.3;});
+  if(diskGrp)diskGrp.rotation.y+=dt*0.3;
+  pl1.intensity=1.2+Math.sin(animT*2)*0.4;
+  const t=topics[curTopic];
+  if(t&&t.steps[curStep].action.startsWith('showWave'))exec(t.steps[curStep].action);
+  renderer.render(scene,camera);
+}
+animate();
+
+// ── SERVICE WORKER ───────────────────────────────────────
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js')
+      .then(()=>console.log('SW registered'))
+      .catch(()=>console.log('SW registration failed — OK for local file'));
+  });
+}
+
+// ── INIT ─────────────────────────────────────────────────
+setTimeout(()=>{
+  document.getElementById('splash').style.opacity='0';
+  setTimeout(()=>{
+    document.getElementById('splash').style.display='none';
+    document.getElementById('app').classList.add('visible');
+    loadTopic('sphere-volume');
+  },600);
+},1800);
+</script>
+</body>
+</html>
