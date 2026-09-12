@@ -664,8 +664,7 @@ function renderQuiz(){
 }
 
 // ── UI ───────────────────────────────────────────────────
-let sidebarVisible=true;
-function toggleSidebar(){sidebarVisible=!sidebarVisible;document.getElementById('sidebar').classList.toggle('hidden',!sidebarVisible);}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('hidden');}
 function setNav(idx,el){document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));el.classList.add('active');if(idx===1)toggleSidebar();}
 
 // ── ANIMATION LOOP ───────────────────────────────────────
