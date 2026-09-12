@@ -10,7 +10,7 @@ const FILES_TO_CACHE = [
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
-  // Three.js is loaded from CDN — cache it too
+  // Three.js is loaded from CDN, cache it too
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
 ];
 
@@ -52,7 +52,7 @@ self.addEventListener('fetch', event => {
         // Serve from cache
         return response;
       }
-      // Not in cache — fetch from network and cache it
+      // Not in cache: fetch from network and cache it
       return fetch(event.request).then(networkResponse => {
         if (
           networkResponse &&
@@ -67,7 +67,7 @@ self.addEventListener('fetch', event => {
         return networkResponse;
       });
     }).catch(() => {
-      // Offline fallback — return cached HTML
+      // Offline fallback: return cached HTML
       return caches.match('/index.html');
     })
   );

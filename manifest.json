@@ -1,7 +1,7 @@
 {
   "name": "MathViz 3D",
   "short_name": "MathViz",
-  "description": "Interactive 3D Math & Physics Animations — Sphere, Cylinder, Cone, Projectile, Waves",
+  "description": "Interactive 3D Math & Physics Animations: Sphere, Cylinder, Cone, Projectile, Waves",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
