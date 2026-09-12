@@ -1,11 +1,12 @@
 // ── MathViz 3D Service Worker ──────────────────────────
 // Change version string whenever you update the app
 // This forces old cache to be cleared on next visit
-const CACHE_NAME = 'mathviz3d-v1';
+const CACHE_NAME = 'mathviz3d-v2';
 
 // Files to cache for offline use
 const FILES_TO_CACHE = [
-  '/mathviz3d.html',
+  '/',
+  '/index.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -67,7 +68,7 @@ self.addEventListener('fetch', event => {
       });
     }).catch(() => {
       // Offline fallback — return cached HTML
-      return caches.match('/mathviz3d.html');
+      return caches.match('/index.html');
     })
   );
 });
