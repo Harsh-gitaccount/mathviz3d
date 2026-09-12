@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"/>
 <meta name="theme-color" content="#0f0f1a"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -31,7 +31,11 @@
     --shadow: 0 8px 32px rgba(0,0,0,0.4);
   }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; overflow:hidden; height:100vh; width:100vw; }
+  html { height:-webkit-fill-available; }
+  body {
+    background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; overflow:hidden;
+    height:100vh; height:-webkit-fill-available; height:100dvh; width:100vw;
+  }
 
   #splash {
     position:fixed; inset:0; background:var(--bg);
@@ -44,11 +48,14 @@
   #splash .loader-bar { height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--gold)); border-radius:2px; animation:load 1.5s ease forwards; }
   @keyframes load { to { width:100%; } }
 
-  #app { display:flex; flex-direction:column; height:100vh; opacity:0; transition:opacity 0.5s; }
+  #app {
+    display:flex; flex-direction:column; opacity:0; transition:opacity 0.5s;
+    height:100vh; height:-webkit-fill-available; height:100dvh;
+  }
   #app.visible { opacity:1; }
 
   header {
-    background:var(--surface); padding:12px 16px;
+    background:var(--surface); padding:max(12px, env(safe-area-inset-top)) 16px 12px;
     display:flex; align-items:center; justify-content:space-between;
     border-bottom:1px solid rgba(255,255,255,0.06);
     flex-shrink:0; z-index:10;
@@ -63,9 +70,10 @@
   #sidebar {
     width:260px; background:var(--surface); border-right:1px solid rgba(255,255,255,0.06);
     display:flex; flex-direction:column; overflow:hidden; flex-shrink:0;
-    transition:transform 0.3s; z-index:5;
+    transition:transform 0.3s; z-index:20;
   }
   #sidebar.hidden { transform:translateX(-260px); position:absolute; height:100%; }
+  #sidebar-backdrop { display:none; }
   .sidebar-title { padding:14px 16px 8px; font-size:0.7rem; font-weight:700; letter-spacing:2px; color:var(--text2); text-transform:uppercase; }
   .topic-list { overflow-y:auto; flex:1; padding:0 8px 8px; }
   .topic-list::-webkit-scrollbar { width:4px; }
@@ -179,6 +187,9 @@
 
   @media (max-width: 600px) {
     #sidebar { position:absolute; height:calc(100% - 0px); top:0; }
+    #sidebar:not(.hidden) + #sidebar-backdrop {
+      display:block; position:absolute; inset:0; background:rgba(0,0,0,0.5); z-index:15;
+    }
     #formula-panel { max-width:140px; padding:10px; font-size:0.75rem; }
     .formula-line { font-size:0.75rem; }
   }
@@ -245,6 +256,7 @@
         </div>
       </div>
     </div>
+    <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
     <div id="content">
       <div id="canvas-wrap">
